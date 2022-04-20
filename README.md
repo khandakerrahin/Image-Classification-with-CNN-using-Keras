@@ -188,7 +188,7 @@ show_random_examples(x_train, y_train, y_train)
 
 
     
-![png](output_8_0.png)
+![png](images/output_8_0.png)
     
 
 
@@ -199,7 +199,7 @@ show_random_examples(x_test, y_test, y_test)
 
 
     
-![png](output_9_0.png)
+![png](images/output_9_0.png)
     
 
 
@@ -366,7 +366,7 @@ plt.show()
 
 
     
-![png](output_15_0.png)
+![png](images/output_15_0.png)
     
 
 
@@ -387,7 +387,7 @@ show_random_examples(x_test, y_test, preds)
 
 
     
-![png](output_18_0.png)
+![png](images/output_18_0.png)
     
 
 
