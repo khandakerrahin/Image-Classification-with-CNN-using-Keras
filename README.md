@@ -288,7 +288,7 @@ show_random_examples(x_train, y_train, y_train)
 
 
     
-![png](output_18_0.png)
+![png](images/output_18_0.png)
     
 
 
@@ -299,7 +299,7 @@ show_random_examples(x_test, y_test, y_test)
 
 
     
-![png](output_19_0.png)
+![png](images/output_19_0.png)
     
 
 
@@ -328,7 +328,7 @@ show_random_examples(x_train, y_train, y_train)
 
 
     
-![png](output_20_0.png)
+![png](images/output_20_0.png)
     
 
 
@@ -498,7 +498,7 @@ plt.show()
 
 
     
-![png](output_27_0.png)
+![png](images/output_27_0.png)
     
 
 
@@ -556,19 +556,19 @@ show_random_examples(x_test, y_test, preds)
 
 
     
-![png](output_32_0.png)
+![png](images/output_32_0.png)
     
 
 
 
     
-![png](output_32_1.png)
+![png](images/output_32_1.png)
     
 
 
 
     
-![png](output_32_2.png)
+![png](images/output_32_2.png)
     
 
 
