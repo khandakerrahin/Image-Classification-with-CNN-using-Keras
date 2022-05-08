@@ -1,20 +1,26 @@
-# Image Classification with CNN using Keras
+# Image Search Engine with CNN using Keras
 
 # Task 1: Import Libraries
 
 
 ```python
-!pip install tensorflow
-```
-
-    ... logs for installation ...
-    
-
-
-```python
 import tensorflow as tf
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+import pandas as pd
 import numpy as np
+from keras.models import Sequential
+from keras.layers import Convolution2D,BatchNormalization
+from keras.layers import MaxPooling2D,Dropout
+from keras.layers import Flatten
+from keras.layers import Dense
+import cv2
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.model_selection import train_test_split
+
+from keras.preprocessing.image import img_to_array
+import random
+from keras.preprocessing import image
 
 from matplotlib import pyplot as plt
 %matplotlib inline
@@ -23,72 +29,237 @@ if not os.path.isdir('models'):
     os.mkdir('models')
     
 print('TensorFlow version:', tf.__version__)
-print('Is using GPU?', tf.test.is_gpu_available())
+print('Is using GPU?', False if tf.config.list_physical_devices('GPU') == [] else True)
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+# print(tf.config.list_physical_devices('GPU'))
 ```
 
     TensorFlow version: 2.8.0
     Is using GPU? False
+    Num GPUs Available:  0
     
+
+# Importing Dataset
+
+
+```python
+class Dataset(object):
+    def __init__(self, data_path):
+        self.data_path = data_path
+        assert os.path.exists(self.data_path), 'Insert a valid path!'
+
+        # get class list
+        self.data_classes = os.listdir(self.data_path)
+
+        # init mapping dict
+        self.data_mapping = {}
+
+        # populate mapping dict
+        for c, c_name in enumerate(self.data_classes):
+            temp_path = os.path.join(self.data_path, c_name)
+            temp_images = os.listdir(temp_path)
+
+            for i in temp_images:
+                img_tmp = os.path.join(temp_path, i)
+
+                if img_tmp.lower().endswith(('.jpg', '.jpeg')):
+                    if c_name == 'distractor':
+                        self.data_mapping[img_tmp] = -1
+                    else:
+                        self.data_mapping[img_tmp] = c_name
+
+        print('Loaded {:d} from {:s} images'.format(len(self.data_mapping.keys()),
+                                                    self.data_path))
+
+    def get_data_paths(self):
+        # returns a list of imgpaths and related classes
+        images = []
+        classes = []
+        for img_path in self.data_mapping.keys():
+            if img_path.lower().endswith(('.jpg', '.jpeg')):
+                images.append(img_path)
+                classes.append(self.data_mapping[img_path])
+        return images, np.array(classes)
+
+
+    def num_classes(self):
+        # returns number of classes of the dataset
+        return len(self.data_classes)
+```
 
 # Task 2: Preprocess Data
 
 
 ```python
-def get_three_classes(x, y):
-    indices_0, _ = np.where(y == 0.)
-    indices_1, _ = np.where(y == 1.)
-    indices_2, _ = np.where(y == 2.)
+# we get data_path
+# data_path = '/content/drive/MyDrive/ML/dataset'
+data_path = 'dataset_rahin'
+# we define training_path
+training_path = os.path.join(data_path, 'training')
 
-    indices = np.concatenate([indices_0, indices_1, indices_2], axis=0)
-    
-    x = x[indices]
-    y = y[indices]
-    
-    count = x.shape[0]
-    indices = np.random.choice(range(count), count, replace=False)
-    
-    x = x[indices]
-    y = y[indices]
-    
-    y = tf.keras.utils.to_categorical(y)
-    
-    return x, y
+# we define validation path, query and gallery
+validation_path = os.path.join(data_path, 'validation')
+gallery_path = os.path.join(validation_path, 'gallery')
+query_path = os.path.join(validation_path, 'query')
 ```
 
 
 ```python
-(x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+training_dataset = Dataset(data_path=training_path)
+gallery_dataset = Dataset(data_path=gallery_path)
+query_dataset = Dataset(data_path=query_path)
+```
+
+    Loaded 47986 from dataset_rahin\training images
+    Loaded 295 from dataset_rahin\validation\gallery images
+    Loaded 26 from dataset_rahin\validation\query images
+    
+
+
+```python
+"""Importing the data folder and giving a shuffle"""
+dataset=[]
+labels=[]
+random.seed(421)
+# print("Before sort:")
+# print(imagePaths)
+# print()
+# print()
+# print()
+imagePaths = sorted(list(os.listdir("dataset_rahin/training")))
+print("After sort:")
+print(imagePaths)
+print()
+print()
+print()
+class_names = imagePaths
+# random.shuffle(imagePaths)
+print("After randomize:")
+print(imagePaths)
+print()
+print()
+print()
+
+class_names_random = imagePaths
+```
+
+    After sort:
+    ['antelope', 'axolotl', 'badger', 'bat', 'bear', 'bee', 'beetle', 'bison', 'boar', 'butterfly', 'cat', 'caterpillar', 'cheetah', 'chicken', 'chimpanzee', 'cockroach', 'cow', 'coyote', 'crab', 'crow', 'deer', 'dog', 'dolphin', 'donkey', 'dragonfly', 'duck', 'eagle', 'elephant', 'flamingo', 'fly', 'fox', 'frog', 'goat', 'goldfish', 'goose', 'gorilla', 'grasshopper', 'hamster', 'hare', 'hedgehog', 'hippopotamus', 'hornbill', 'horse', 'hummingbird', 'hyena', 'jellyfish', 'kangaroo', 'koala', 'ladybugs', 'leopard', 'lion', 'lizard', 'lobster', 'mosquito', 'moth', 'mouse', 'octopus', 'okapi', 'orangutan', 'ostrich', 'otter', 'owl', 'ox', 'oyster', 'panda', 'parrot', 'peacock', 'pelecaniformes', 'penguin', 'pig', 'pigeon', 'porcupine', 'possum', 'raccoon', 'rat', 'reindeer', 'rhinoceros', 'sandpiper', 'seahorse', 'seal', 'shark', 'sheep', 'snail', 'snake', 'sparrow', 'spider', 'squid', 'squirrel', 'starfish', 'swan', 'tiger', 'turkey', 'turtle', 'whale', 'wolf', 'wombat', 'woodpecker', 'zebra']
+    
+    
+    
+    After randomize:
+    ['antelope', 'axolotl', 'badger', 'bat', 'bear', 'bee', 'beetle', 'bison', 'boar', 'butterfly', 'cat', 'caterpillar', 'cheetah', 'chicken', 'chimpanzee', 'cockroach', 'cow', 'coyote', 'crab', 'crow', 'deer', 'dog', 'dolphin', 'donkey', 'dragonfly', 'duck', 'eagle', 'elephant', 'flamingo', 'fly', 'fox', 'frog', 'goat', 'goldfish', 'goose', 'gorilla', 'grasshopper', 'hamster', 'hare', 'hedgehog', 'hippopotamus', 'hornbill', 'horse', 'hummingbird', 'hyena', 'jellyfish', 'kangaroo', 'koala', 'ladybugs', 'leopard', 'lion', 'lizard', 'lobster', 'mosquito', 'moth', 'mouse', 'octopus', 'okapi', 'orangutan', 'ostrich', 'otter', 'owl', 'ox', 'oyster', 'panda', 'parrot', 'peacock', 'pelecaniformes', 'penguin', 'pig', 'pigeon', 'porcupine', 'possum', 'raccoon', 'rat', 'reindeer', 'rhinoceros', 'sandpiper', 'seahorse', 'seal', 'shark', 'sheep', 'snail', 'snake', 'sparrow', 'spider', 'squid', 'squirrel', 'starfish', 'swan', 'tiger', 'turkey', 'turtle', 'whale', 'wolf', 'wombat', 'woodpecker', 'zebra']
+    
+    
+    
+    
+
+
+```python
+for images in imagePaths:
+    path=sorted(list(os.listdir("dataset_rahin/training/"+images)))
+    for i in path:
+        try:
+            image = cv2.imread("dataset_rahin/training/"+images+'/'+i) #using opencv to read image
+#             print(images, ": ", i, ": ", image.shape)
+#             image=cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = cv2.resize(image, (128,128)) 
+#             image = img_to_array(image) #converting image info to array
+            dataset.append(image)
+
+            l = label = images
+            labels.append(l)
+#             print(l)
+        except:
+            print("Error with loading and resizing image", " ", images, ": ", i)
+            #code to move to next frame
+```
+
+
+```python
+"""Converting to numpay array"""
+dataset = np.array(dataset, dtype="float32") / 255.0
+original_labels = np.array(labels)
+
+"""Here we are using LabelBinarizer to scale data because it does not need data in integer encoded form first to convert into its respective encoding"""
+lb = LabelBinarizer()
+labels = lb.fit_transform(original_labels)
+```
+
+
+```python
+"""Splitting dataset into train and test"""
+
+x_train,x_test,y_train,y_test=train_test_split(dataset,labels,test_size=0.3,random_state=421)
+```
+
+
+```python
+# print(y_train)
+```
+
+
+```python
+# y_test = tf.keras.utils.to_categorical(y_test)
+```
+
+
+```python
+# y_train = tf.keras.utils.to_categorical(y_train)
+# y_train2 = tf.keras.utils.to_categorical(np.asarray(y_train.factorize()[0]))
+```
+
+
+```python
+# def get_three_classes(x, y):
+#     indices_0, _ = np.where(y == 0.)
+#     indices_1, _ = np.where(y == 1.)
+#     indices_2, _ = np.where(y == 2.)
+
+#     indices = np.concatenate([indices_0, indices_1, indices_2], axis=0)
+    
+#     x = x[indices]
+#     y = y[indices]
+    
+#     count = x.shape[0]
+#     indices = np.random.choice(range(count), count, replace=False)
+    
+#     x = x[indices]
+#     y = y[indices]
+    
+#     y = tf.keras.utils.to_categorical(y)
+    
+#     return x, y
+```
+
+
+```python
+# (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
 print("Train whole set:")
 print(x_train.shape, y_train.shape)
 print("Test whole set:")
 print(x_test.shape, y_test.shape)
 
-x_train, y_train = get_three_classes(x_train, y_train)
-x_test, y_test = get_three_classes(x_test, y_test)
-print("Train subset:")
-print(x_train.shape, y_train.shape)
-print("Test subset:")
-print(x_test.shape, y_test.shape)
+# x_train2, y_train2 = get_three_classes(x_train, y_train)
+# x_test2, y_test2 = get_three_classes(x_test, y_test)
+# print("Train subset:")
+# print(x_train2.shape, y_train2.shape)
+# print("Test subset:")
+# print(x_test2.shape, y_test2.shape)
 ```
 
-    Downloading data from https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
-    170500096/170498071 [==============================] - 415s 2us/step
-    170508288/170498071 [==============================] - 415s 2us/step
     Train whole set:
-    (50000, 32, 32, 3) (50000, 1)
+    (33625, 128, 128, 3) (33625, 98)
     Test whole set:
-    (10000, 32, 32, 3) (10000, 1)
-    Train subset:
-    (15000, 32, 32, 3) (15000, 3)
-    Test subset:
-    (3000, 32, 32, 3) (3000, 3)
+    (14412, 128, 128, 3) (14412, 98)
     
 
 # Task 3: Visualize Examples
 
 
 ```python
-class_names = ['aeroplane', 'car', 'bird']
+# class_names = ['aeroplane', 'car', 'bird']
 
 def show_random_examples(x, y, p):
     indices = np.random.choice(range(x.shape[0]), 10, replace=False)
@@ -97,14 +268,19 @@ def show_random_examples(x, y, p):
     y = y[indices]
     p = p[indices]
     
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(20, 5))
     for i in range(10):
         plt.subplot(2, 5, 1 + i)
         plt.imshow(x[i])
         plt.xticks([])
         plt.yticks([])
         col = 'green' if np.argmax(y[i]) == np.argmax(p[i]) else 'red'
-        plt.xlabel(class_names[np.argmax(p[i])], color=col)
+#         sblabel = i, "pc:"+str(np.argmax(p[i])), "p:"+str(max(p[i])*100)+"%", "tc:"+str(np.argmax(y[i]))
+#         sblabel = "pc:"+class_names[np.argmax(p[i])], "p:"+str(max(p[i])*100)+"%", "tc:"+class_names[np.argmax(y[i])]
+        sblabel = class_names[np.argmax(p[i])], str(max(p[i])*100)+"%"
+        plt.xlabel(sblabel, color=col)
+#         print(class_names_random)
+#         print(np.argmax(p[i]))
     plt.show()
     
 show_random_examples(x_train, y_train, y_train)
@@ -112,7 +288,7 @@ show_random_examples(x_train, y_train, y_train)
 
 
     
-![png](images/output_8_0.png)
+![png](output_18_0.png)
     
 
 
@@ -123,9 +299,46 @@ show_random_examples(x_test, y_test, y_test)
 
 
     
-![png](images/output_9_0.png)
+![png](output_19_0.png)
     
 
+
+
+```python
+def show_similar_images(x, y, p, specific_class):
+#     indices = np.random.choice(range(x.shape[0]), 10, replace=False)
+    
+#     x = x[indices]
+#     y = y[indices]
+#     p = p[indices]
+    
+    plt.figure(figsize=(20, 5))
+    for i in range(10):
+        plt.subplot(2, 5, 1 + i)
+        plt.imshow(x[i])
+        plt.xticks([])
+        plt.yticks([])
+        col = 'green' if np.argmax(y[i]) == np.argmax(p[i]) else 'red'
+        sblabel = i, "pc:"+str(np.argmax(p[i])), "p:"+str(max(p[i])*100)+"%", "tc:"+str(np.argmax(y[i]))
+        plt.xlabel(sblabel, color=col)
+    plt.show()
+    
+show_random_examples(x_train, y_train, y_train)
+```
+
+
+    
+![png](output_20_0.png)
+    
+
+
+
+```python
+print(np.argmax(y_train[0]))
+```
+
+    21
+    
 
 # Task 4: Create Model
 
@@ -140,18 +353,18 @@ def create_model():
         model.add(BatchNormalization())
         model.add(Conv2D(num_filters, 3, activation='relu'))
         model.add(MaxPooling2D(pool_size=2))
-        model.add(Dropout(0.5))
+#         model.add(Dropout(0.5))
         return model
 
     model = tf.keras.models.Sequential()
-    model.add(Input(shape=(32, 32,3)))
+    model.add(Input(shape=(128, 128,3)))
     
     model = add_conv_block(model, 32)
     model = add_conv_block(model, 64)
     model = add_conv_block(model, 128)
     
     model.add(Flatten())
-    model.add(Dense(3, activation='softmax'))
+    model.add(Dense(98, activation='softmax'))
     
     model.compile(
         loss='categorical_crossentropy',
@@ -167,49 +380,43 @@ model.summary()
     _________________________________________________________________
      Layer (type)                Output Shape              Param #   
     =================================================================
-     conv2d (Conv2D)             (None, 32, 32, 32)        896       
+     conv2d (Conv2D)             (None, 128, 128, 32)      896       
                                                                      
-     batch_normalization (BatchN  (None, 32, 32, 32)       128       
+     batch_normalization (BatchN  (None, 128, 128, 32)     128       
      ormalization)                                                   
                                                                      
-     conv2d_1 (Conv2D)           (None, 30, 30, 32)        9248      
+     conv2d_1 (Conv2D)           (None, 126, 126, 32)      9248      
                                                                      
-     max_pooling2d (MaxPooling2D  (None, 15, 15, 32)       0         
+     max_pooling2d (MaxPooling2D  (None, 63, 63, 32)       0         
      )                                                               
                                                                      
-     dropout (Dropout)           (None, 15, 15, 32)        0         
+     conv2d_2 (Conv2D)           (None, 63, 63, 64)        18496     
                                                                      
-     conv2d_2 (Conv2D)           (None, 15, 15, 64)        18496     
-                                                                     
-     batch_normalization_1 (Batc  (None, 15, 15, 64)       256       
+     batch_normalization_1 (Batc  (None, 63, 63, 64)       256       
      hNormalization)                                                 
                                                                      
-     conv2d_3 (Conv2D)           (None, 13, 13, 64)        36928     
+     conv2d_3 (Conv2D)           (None, 61, 61, 64)        36928     
                                                                      
-     max_pooling2d_1 (MaxPooling  (None, 6, 6, 64)         0         
+     max_pooling2d_1 (MaxPooling  (None, 30, 30, 64)       0         
      2D)                                                             
                                                                      
-     dropout_1 (Dropout)         (None, 6, 6, 64)          0         
+     conv2d_4 (Conv2D)           (None, 30, 30, 128)       73856     
                                                                      
-     conv2d_4 (Conv2D)           (None, 6, 6, 128)         73856     
-                                                                     
-     batch_normalization_2 (Batc  (None, 6, 6, 128)        512       
+     batch_normalization_2 (Batc  (None, 30, 30, 128)      512       
      hNormalization)                                                 
                                                                      
-     conv2d_5 (Conv2D)           (None, 4, 4, 128)         147584    
+     conv2d_5 (Conv2D)           (None, 28, 28, 128)       147584    
                                                                      
-     max_pooling2d_2 (MaxPooling  (None, 2, 2, 128)        0         
+     max_pooling2d_2 (MaxPooling  (None, 14, 14, 128)      0         
      2D)                                                             
                                                                      
-     dropout_2 (Dropout)         (None, 2, 2, 128)         0         
+     flatten (Flatten)           (None, 25088)             0         
                                                                      
-     flatten (Flatten)           (None, 512)               0         
-                                                                     
-     dense (Dense)               (None, 3)                 1539      
+     dense (Dense)               (None, 98)                2458722   
                                                                      
     =================================================================
-    Total params: 289,443
-    Trainable params: 288,995
+    Total params: 2,746,626
+    Trainable params: 2,746,178
     Non-trainable params: 448
     _________________________________________________________________
     
@@ -221,9 +428,9 @@ model.summary()
 h = model.fit(
     x_train/255., y_train,
     validation_data=(x_test/255., y_test),
-    epochs=20, batch_size=64,
+    epochs=10, batch_size=128,
     callbacks=[
-        tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5),
+        tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=3),
         tf.keras.callbacks.ModelCheckpoint(
             'models/model_{val_accuracy:.3f}.h5',
             save_best_only=True, save_weights_only=False,
@@ -233,70 +440,71 @@ h = model.fit(
 )
 ```
 
-    Epoch 1/20
-    235/235 [==============================] - 21s 90ms/step - loss: 0.2868 - accuracy: 0.8900 - val_loss: 0.2514 - val_accuracy: 0.9090
-    Epoch 2/20
-    235/235 [==============================] - 21s 89ms/step - loss: 0.2700 - accuracy: 0.8978 - val_loss: 0.6099 - val_accuracy: 0.8137
-    Epoch 3/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.2534 - accuracy: 0.9031 - val_loss: 0.2670 - val_accuracy: 0.9060
-    Epoch 4/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.2441 - accuracy: 0.9059 - val_loss: 0.3108 - val_accuracy: 0.8820
-    Epoch 5/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.2371 - accuracy: 0.9115 - val_loss: 0.2478 - val_accuracy: 0.9137
-    Epoch 6/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.2228 - accuracy: 0.9144 - val_loss: 0.2014 - val_accuracy: 0.9240
-    Epoch 7/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.2144 - accuracy: 0.9172 - val_loss: 0.3750 - val_accuracy: 0.8747
-    Epoch 8/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.2089 - accuracy: 0.9224 - val_loss: 0.3351 - val_accuracy: 0.8707
-    Epoch 9/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.2082 - accuracy: 0.9197 - val_loss: 0.2159 - val_accuracy: 0.9150
-    Epoch 10/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.1913 - accuracy: 0.9283 - val_loss: 0.2120 - val_accuracy: 0.9297
-    Epoch 11/20
-    235/235 [==============================] - 21s 87ms/step - loss: 0.1879 - accuracy: 0.9292 - val_loss: 0.3387 - val_accuracy: 0.8870
-    Epoch 12/20
-    235/235 [==============================] - 21s 88ms/step - loss: 0.1843 - accuracy: 0.9303 - val_loss: 0.1869 - val_accuracy: 0.9257
-    Epoch 13/20
-    235/235 [==============================] - 21s 89ms/step - loss: 0.1764 - accuracy: 0.9347 - val_loss: 0.2107 - val_accuracy: 0.9210
-    Epoch 14/20
-    235/235 [==============================] - 20s 87ms/step - loss: 0.1751 - accuracy: 0.9338 - val_loss: 0.1792 - val_accuracy: 0.9340
-    Epoch 15/20
-    235/235 [==============================] - 20s 87ms/step - loss: 0.1727 - accuracy: 0.9343 - val_loss: 0.1792 - val_accuracy: 0.9360
-    Epoch 16/20
-    235/235 [==============================] - 20s 87ms/step - loss: 0.1650 - accuracy: 0.9353 - val_loss: 0.2351 - val_accuracy: 0.9173
-    Epoch 17/20
-    235/235 [==============================] - 20s 87ms/step - loss: 0.1594 - accuracy: 0.9394 - val_loss: 0.1770 - val_accuracy: 0.9337
-    Epoch 18/20
-    235/235 [==============================] - 20s 86ms/step - loss: 0.1582 - accuracy: 0.9393 - val_loss: 0.1861 - val_accuracy: 0.9297
-    Epoch 19/20
-    235/235 [==============================] - 20s 86ms/step - loss: 0.1504 - accuracy: 0.9437 - val_loss: 0.1990 - val_accuracy: 0.9273
-    Epoch 20/20
-    235/235 [==============================] - 21s 87ms/step - loss: 0.1521 - accuracy: 0.9422 - val_loss: 0.1856 - val_accuracy: 0.9333
+    Epoch 1/10
+    263/263 [==============================] - 641s 2s/step - loss: 2.2073 - accuracy: 0.4365 - val_loss: 4.5776 - val_accuracy: 0.0971
+    Epoch 2/10
+    263/263 [==============================] - 629s 2s/step - loss: 1.3388 - accuracy: 0.6413 - val_loss: 3.9060 - val_accuracy: 0.0833
+    Epoch 3/10
+    263/263 [==============================] - 636s 2s/step - loss: 0.8090 - accuracy: 0.7580 - val_loss: 1.6845 - val_accuracy: 0.5693
+    Epoch 4/10
+    263/263 [==============================] - 636s 2s/step - loss: 0.4727 - accuracy: 0.8495 - val_loss: 1.7868 - val_accuracy: 0.6057
+    Epoch 5/10
+    263/263 [==============================] - 635s 2s/step - loss: 0.2809 - accuracy: 0.9064 - val_loss: 2.1881 - val_accuracy: 0.6429
+    Epoch 6/10
+    263/263 [==============================] - 638s 2s/step - loss: 0.1567 - accuracy: 0.9484 - val_loss: 2.3991 - val_accuracy: 0.6466
+    Epoch 7/10
+    263/263 [==============================] - 689s 3s/step - loss: 0.0971 - accuracy: 0.9693 - val_loss: 2.1281 - val_accuracy: 0.6459
+    Epoch 8/10
+    263/263 [==============================] - 673s 3s/step - loss: 0.0621 - accuracy: 0.9806 - val_loss: 2.6158 - val_accuracy: 0.6770
+    Epoch 9/10
+    263/263 [==============================] - 656s 2s/step - loss: 0.0471 - accuracy: 0.9860 - val_loss: 2.4200 - val_accuracy: 0.6719
+    Epoch 10/10
+    263/263 [==============================] - 670s 3s/step - loss: 0.0365 - accuracy: 0.9889 - val_loss: 3.6218 - val_accuracy: 0.6273
     
 
 # Task 6: Final Predictions
 
 
 ```python
+# accs = h.history['accuracy']
+# val_accs = h.history['val_accuracy']
+
+# plt.plot(range(len(accs)), accs, label='Training')
+# plt.plot(range(len(accs)), val_accs, label='Validation')
+# plt.legend()
+# plt.show()
+
 accs = h.history['accuracy']
 val_accs = h.history['val_accuracy']
+loss = h.history['loss']
+val_loss = h.history['val_loss']
 
-plt.plot(range(len(accs)), accs, label='Training')
-plt.plot(range(len(accs)), val_accs, label='Validation')
-plt.legend()
+epochs_range = range(10)
+
+plt.figure(figsize=(15, 15))
+plt.subplot(2, 2, 1)
+plt.plot(epochs_range, accs, label='Training Accuracy')
+plt.plot(epochs_range, val_accs, label='Validation Accuracy')
+plt.legend(loc='lower right')
+plt.title('Training and Validation Accuracy')
+
+plt.subplot(2, 2, 2)
+plt.plot(epochs_range, loss, label='Training Loss')
+plt.plot(epochs_range, val_loss, label='Validation Loss')
+plt.legend(loc='upper right')
+plt.title('Training and Validation Loss')
 plt.show()
 ```
 
 
     
-![png](images/output_15_0.png)
+![png](output_27_0.png)
     
 
 
 
 ```python
-model= tf.keras.models.load_model('models/model_0.936.h5')
+model= tf.keras.models.load_model('models/model_0.677.h5')
 ```
 
 
@@ -306,12 +514,61 @@ preds = model.predict(x_test/255.)
 
 
 ```python
+# max(preds[2])
+i = 0
+for result in preds[10]:
+    fres = format(result, '.2f')
+    if float(fres)>0.0:
+        print(class_names[i], fres)
+    
+    i+=1
+# print(len(preds))
+# for result in preds:
+#     print(np.argmax(result), "     ", str(max(result)))
+```
+
+    butterfly 0.72
+    chicken 0.01
+    snail 0.01
+    spider 0.17
+    squirrel 0.04
+    woodpecker 0.06
+    
+
+
+```python
+type(preds)
+```
+
+
+
+
+    numpy.ndarray
+
+
+
+
+```python
+show_random_examples(x_test, y_test, preds)
+show_random_examples(x_test, y_test, preds)
 show_random_examples(x_test, y_test, preds)
 ```
 
 
     
-![png](images/output_18_0.png)
+![png](output_32_0.png)
+    
+
+
+
+    
+![png](output_32_1.png)
+    
+
+
+
+    
+![png](output_32_2.png)
     
 
 
