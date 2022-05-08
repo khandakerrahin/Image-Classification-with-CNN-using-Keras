@@ -1,4 +1,4 @@
-# Image Search Engine with CNN using Keras
+# Image Classification with CNN using Keras
 
 # Task 1: Import Libraries
 
